@@ -143,6 +143,7 @@ async def main(loop):
                 i = results1[0]
             cnt1 = cnt1 + 1
 
+            ##разбор сообщений на странице
             cursor = await dbsel('select  href, idt from themes_a')
             async with aiohttp.ClientSession(loop=loop) as session:
                 tasks = [corutine_download(session, row[0]) for row in cursor]
@@ -184,12 +185,11 @@ async def main(loop):
                                 text_message = text_message.replace('\'', '')
                             if '\'' in message_user:
                                 message_user = message_user.replace('\'', '')
-                            cursor.execute('select idt from themes where name=\'' + namet + '\'')
-                            idt = cursor.fetchone()
+                            idt = cursor[cnt1][1]
                             cursor.execute(
                                 'insert into messages (idt,date_message,user_message,text) values (%s,%s,%s,%s)',
                                 (idt, message_date, message_user, text_message))
-                            conn.commit()
+
 
                         # проверка наличия следующей страницы в сообщениях
                         r5 = scraper_sess.get('https://deep.dublikat.shop' + hreft + 'page-' + str(b))
@@ -200,18 +200,20 @@ async def main(loop):
                         soup5 = BeautifulSoup(r5.text)
                         page_cont5 = soup5.find('div', {'class': 'p-body-main'})
                         items5 = page_cont5.find_all('div', {'class': 'message-inner'})
-                        for item in items5:
-                            textmesst = item.find('div', {'class': 'bbWrapper'}).text
-                            break
-                        for item in items4:
-                            textmess = item.find('div', {'class': 'bbWrapper'}).text
-                            break
-                        if textmess == textmesst:
-                            break
-                        b = b + 1
-                        r4 = r5
-    print(time.time() - start)
+                    for item in items5:
+                        textmesst = item.find('div', {'class': 'bbWrapper'}).text
+                        break
+                    for item in items4:
+                        textmess = item.find('div', {'class': 'bbWrapper'}).text
+                        break
+                    if textmess == textmesst:
+                        break
+                    b = b + 1
+                    r4 = r5
+                cnt1 = cnt1 + 1
 
+
+print(time.time() - start)
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
