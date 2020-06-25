@@ -108,7 +108,7 @@ async def main(loop):
                     sql = 'insert into themes_a (idf2,name,href,create_user,create_date) values (' + str(
                         idf2) + ',\'' + namet + '\',\'' + 'https://my.dublikat.shop' + hreft + '\',\'' + create_usert + '\',\'' + create_datet + '\')'
 
-                    await dbtrans(sql)
+                    # await dbtrans(sql)
                 url = cursor[cnt][0]
                 url = url + 'page-' + str(a)
 
@@ -142,6 +142,74 @@ async def main(loop):
                 a = a + 1
                 i = results1[0]
             cnt1 = cnt1 + 1
+
+            cursor = await dbsel('select  href, idt from themes_a')
+            async with aiohttp.ClientSession(loop=loop) as session:
+                tasks = [corutine_download(session, row[0]) for row in cursor]
+                results = await asyncio.gather(*tasks)
+                cnt = 0
+                cnt1 = 0
+            for i in results:
+                b = 2
+                while 1:
+                    items_m = use_bs('div', {'class': 'p-body-main'}, 'div',
+                                     {'class': 'message-inner'}, i)
+                    for item in items_m:
+                            # print(item)
+
+                            if item.find('h4', {'class': 'message-name'}).find('span') is not None:
+                                message_user = item.find('h4', {'class': 'message-name'}).find('span').text
+                            else:
+                                message_user = item.find('h4', {'class': 'message-name'}).find('a').text
+
+                            message_date = item.find('time', {'class': 'u-dt'}).text
+                            text_message = item.find('div', {'class': 'bbWrapper'}).text
+                            if 'class="username' in text_message:
+                                ans_user = item.find('a', {'class': 'username'}).text
+                                text_message = text_message['</a>':]
+                                text_message = ans_user + ', ' + text_message['</a>':]
+
+                            if 'blockquote' in text_message:
+                                ans_user = item.find('a', {'class': 'bbCodeBlock-sourceJump'}).text
+                                ans_text = item.find('div', {'class': 'bbCodeBlock-expandContent '}).text
+                                text_message = ans_user + ': ' + ans_text + ' - ' + text_message[
+                                                                                    '</blockquote>':]
+
+                            # images_link = ''
+                            # img_items=item.find_all('a', {'class': 'link link--external'})
+                            # if img_items is not None:
+                            # for item in img_items:
+                            # images_link=images_link+' '+item.find('img', {'class': 'bbImage'}).data-url
+                            if '\'' in text_message:
+                                text_message = text_message.replace('\'', '')
+                            if '\'' in message_user:
+                                message_user = message_user.replace('\'', '')
+                            cursor.execute('select idt from themes where name=\'' + namet + '\'')
+                            idt = cursor.fetchone()
+                            cursor.execute(
+                                'insert into messages (idt,date_message,user_message,text) values (%s,%s,%s,%s)',
+                                (idt, message_date, message_user, text_message))
+                            conn.commit()
+
+                        # проверка наличия следующей страницы в сообщениях
+                        r5 = scraper_sess.get('https://deep.dublikat.shop' + hreft + 'page-' + str(b))
+                        print('https://deep.dublikat.shop' + hreft + 'page-' + str(b))
+                        session.close()
+                        if r5.status_code == 404:
+                            break
+                        soup5 = BeautifulSoup(r5.text)
+                        page_cont5 = soup5.find('div', {'class': 'p-body-main'})
+                        items5 = page_cont5.find_all('div', {'class': 'message-inner'})
+                        for item in items5:
+                            textmesst = item.find('div', {'class': 'bbWrapper'}).text
+                            break
+                        for item in items4:
+                            textmess = item.find('div', {'class': 'bbWrapper'}).text
+                            break
+                        if textmess == textmesst:
+                            break
+                        b = b + 1
+                        r4 = r5
     print(time.time() - start)
 
 
