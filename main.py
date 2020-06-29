@@ -35,8 +35,7 @@ def use_bs(p_cont1, p_cont2, p_items1, p_items2, html_file):
         return items
 
 
-async def main(loop):
-    start = time.time()
+async def parse_f1():
     # загрузка списка форумов 1-го уровня
     async with aiohttp.ClientSession(loop=loop) as session:
         results = await corutine_download(session, 'https://deep.dublikat.shop')
@@ -48,6 +47,8 @@ async def main(loop):
                 'https://deep.dublikat.shop' + href_f1, descr_f1)
             # await dbtrans(sql)
 
+
+async def parse_f2():
     # разбор 2 уровня
     cursor = await dbsel('select  href, idf1 from f1a')
 
@@ -73,6 +74,8 @@ async def main(loop):
                     # await dbtrans(('insert into f2a (idf1,name,descr,href) values (' + str(cursor[cnt][1]) + ',\'' + namef2 + '\',\'' + descr + '\',\'' + 'https://my.dublikat.shop'+href + '\')'))
             cnt = cnt + 1
 
+
+async def parse_themes():
     # разбор тем в форумах
     cursor = await dbsel('select  href, idf2 from f2a')
     async with aiohttp.ClientSession(loop=loop) as session:
@@ -115,7 +118,7 @@ async def main(loop):
 
                 async with aiohttp.ClientSession(loop=loop) as session:
                     tasks = [corutine_download(session, url)]
-                    results1 = await asyncio.gather(*tasks)
+                    results1 = await   asyncio.gather(*tasks)
 
                 if results1 is None:
                     cnt = cnt + 1
@@ -144,79 +147,90 @@ async def main(loop):
                 i = results1[0]
             cnt1 = cnt1 + 1
 
-            ##разбор сообщений на странице
-            cursor = await dbsel('select  href, idt from themes_a')
+
+async def parse_messages():
+    # разбор сообщений на странице
+    cursor = await dbsel('select  href, idt from themes_a')
+    async with aiohttp.ClientSession(loop=loop) as session:
+        tasks = [corutine_download(session, row[0]) for row in cursor]
+        results = await  asyncio.gather(*tasks)
+        cnt = 0
+        cnt1 = 0
+    for i in results:
+        b = 2
+        while 1:
+            items_m = use_bs('div', {'class': 'p-body-main'}, 'div',
+                             {'class': 'message-inner'}, i)
+            for item in items_m:
+                # print(item)
+
+                if item.find('h4', {'class': 'message-name'}).find('span') is not None:
+                    message_user = item.find('h4', {'class': 'message-name'}).find('span').text
+                else:
+                    message_user = item.find('h4', {'class': 'message-name'}).find('a').text
+
+                message_date = item.find('time', {'class': 'u-dt'}).text
+                text_message = item.find('div', {'class': 'bbWrapper'}).text
+                if 'class="username' in text_message:
+                    ans_user = item.find('a', {'class': 'username'}).text
+                    text_message = text_message['</a>':]
+                    text_message = ans_user + ', ' + text_message['</a>':]
+
+                if 'blockquote' in text_message:
+                    ans_user = item.find('a', {'class': 'bbCodeBlock-sourceJump'}).text
+                    ans_text = item.find('div', {'class': 'bbCodeBlock-expandContent '}).text
+                    text_message = ans_user + ': ' + ans_text + ' - ' + text_message[
+                                                                        '</blockquote>':]
+
+                # images_link = ''
+                # img_items=item.find_all('a', {'class': 'link link--external'})
+                # if img_items is not None:
+                # for item in img_items:
+                # images_link=images_link+' '+item.find('img', {'class': 'bbImage'}).data-url
+                if '\'' in text_message:
+                    text_message = text_message.replace('\'', '')
+                if '\'' in message_user:
+                    message_user = message_user.replace('\'', '')
+                idt = cursor[cnt1][1]
+                sql = 'insert into messages_a (idt,date_message,user_message,text) values (\'' + str(
+                    idt) + '\',\'' + message_date + '\',\'' + message_user + '\',\'' + text_message + '\')'
+                await  dbtrans(sql)
+
+            # проверка наличия следующей страницы в сообщениях
+            url = cursor[cnt][0]
+            url = url + 'page-' + str(b)
             async with aiohttp.ClientSession(loop=loop) as session:
-                tasks = [corutine_download(session, row[0]) for row in cursor]
-                results = await asyncio.gather(*tasks)
-                cnt = 0
-                cnt1 = 0
-            for i in results:
-                b = 2
-                while 1:
-                    items_m = use_bs('div', {'class': 'p-body-main'}, 'div',
-                                     {'class': 'message-inner'}, i)
-                    for item in items_m:
-                        # print(item)
+                tasks = [corutine_download(session, url)]
+                results1 = await  asyncio.gather(*tasks)
+            if results1 is None:
+                break
+                cnt = cnt + 1
+            soup5 = BeautifulSoup(results1[0])
+            page_cont5 = soup5.find('div', {'class': 'p-body-main'})
+            items5 = page_cont5.find_all('div', {'class': 'message-inner'})
+            if 'Запрашиваемая страница' in page_cont5.text:
+                cnt = cnt + 1
+                break
+            for item in items5:
+                textmesst = item.find('div', {'class': 'bbWrapper'}).text
+                break
+            for item in items_m:
+                textmess = item.find('div', {'class': 'bbWrapper'}).text
+                break
+            if textmess == textmesst:
+                break
+                cnt = cnt + 1
+            b = b + 1
+            i = results1[0]
+        cnt1 = cnt1 + 1
 
-                        if item.find('h4', {'class': 'message-name'}).find('span') is not None:
-                            message_user = item.find('h4', {'class': 'message-name'}).find('span').text
-                        else:
-                            message_user = item.find('h4', {'class': 'message-name'}).find('a').text
 
-                        message_date = item.find('time', {'class': 'u-dt'}).text
-                        text_message = item.find('div', {'class': 'bbWrapper'}).text
-                        if 'class="username' in text_message:
-                            ans_user = item.find('a', {'class': 'username'}).text
-                            text_message = text_message['</a>':]
-                            text_message = ans_user + ', ' + text_message['</a>':]
-
-                        if 'blockquote' in text_message:
-                            ans_user = item.find('a', {'class': 'bbCodeBlock-sourceJump'}).text
-                            ans_text = item.find('div', {'class': 'bbCodeBlock-expandContent '}).text
-                            text_message = ans_user + ': ' + ans_text + ' - ' + text_message[
-                                                                                '</blockquote>':]
-
-                        # images_link = ''
-                        # img_items=item.find_all('a', {'class': 'link link--external'})
-                        # if img_items is not None:
-                        # for item in img_items:
-                        # images_link=images_link+' '+item.find('img', {'class': 'bbImage'}).data-url
-                        if '\'' in text_message:
-                            text_message = text_message.replace('\'', '')
-                        if '\'' in message_user:
-                            message_user = message_user.replace('\'', '')
-                        idt = cursor[cnt1][1]
-                        cursor.execute(
-                            'insert into messages_a (idt,date_message,user_message,text) values (\'' + idt + '\',\'' + message_date + '\',\'' + message_user + '\',\'' + text_message + '\')')
-
-                    # проверка наличия следующей страницы в сообщениях
-                    url = cursor[cnt][0]
-                    url = url + 'page-' + str(a)
-                    async with aiohttp.ClientSession(loop=loop) as session:
-                        tasks = [corutine_download(session, url)]
-                        results1 = await asyncio.gather(*tasks)
-                    if results1 is None:
-                        break
-                        cnt = cnt + 1
-                    soup5 = BeautifulSoup(results1[0])
-                    page_cont5 = soup5.find('div', {'class': 'p-body-main'})
-                    items5 = page_cont5.find_all('div', {'class': 'message-inner'})
-                    if 'Запрашиваемая страница' in page_cont5.text:
-                        cnt = cnt + 1
-                        break
-                    for item in items5:
-                        textmesst = item.find('div', {'class': 'bbWrapper'}).text
-                        break
-                    for item in items_m:
-                        textmess = item.find('div', {'class': 'bbWrapper'}).text
-                        break
-                    if textmess == textmesst:
-                        break
-                        cnt = cnt + 1
-                    b = b + 1
-                    r4 = r5
-                cnt1 = cnt1 + 1
+async def main(loop):
+    start = time.time()
+    # await parse_f1()
+    # await parse_f2()
+    # await parse_themes()
+    await parse_messages()
     print(time.time() - start)
 
 
